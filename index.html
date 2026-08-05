@@ -65,7 +65,7 @@
         canvas {
             background: #0d0d11;
             border-radius: 4px;
-            border: 2px solid #333;
+            border: 2px solid #555;
         }
         
         #chat-container {
@@ -181,10 +181,7 @@
         }
 
         // --- 4-DIGIT SHORT CODE WEBRTC SETUP ---
-        // Generate random 4-digit numeric string (1000 - 9999)
         const my4DigitId = Math.floor(1000 + Math.random() * 9000).toString();
-        
-        // Pass custom 4-digit ID to PeerJS
         const peer = new Peer(my4DigitId);
         let conn = null;
 
@@ -200,11 +197,9 @@
             logSystemMsg("Your Room Code is: " + id);
         });
 
-        // Retry with new ID if 4-digit code collides
         peer.on('error', (err) => {
             if (err.type === 'unavailable-id') {
-                const retryId = Math.floor(1000 + Math.random() * 9000).toString();
-                location.reload(); // Quick refresh if ID taken
+                location.reload();
             } else {
                 console.error(err);
             }
@@ -239,7 +234,6 @@
                     appendMessage(data.sender, data.text, data.tagColor, 'peer');
                     sendDesktopNotification(`Message from ${data.sender}`, data.text);
                 } else if (data.type === 'punch_hit') {
-                    // Knockback processed instantly regardless of tab visibility
                     localPlayer.applyKnockback(data.direction);
                 }
             });
@@ -303,8 +297,10 @@
         const GRAVITY = 0.5;
         const FRICTION = 0.85;
 
+        // Ground split in two to leave room for the center spike pit
         const platforms = [
-            { x: 0, y: 510, w: 900, h: 40 },
+            { x: 0, y: 510, w: 350, h: 40 },   // Left Ground
+            { x: 550, y: 510, w: 350, h: 40 }, // Right Ground
             { x: 80, y: 400, w: 200, h: 15 },
             { x: 620, y: 400, w: 200, h: 15 },
             { x: 350, y: 320, w: 200, h: 15 },
@@ -313,8 +309,12 @@
             { x: 380, y: 110, w: 140, h: 15 }
         ];
 
+        // Center Red Spike Pit Hazard Bounds
+        const spikePit = { x: 350, y: 510, w: 200, h: 40, count: 10 };
+
         class Player {
             constructor(startX) {
+                this.startX = startX;
                 this.x = startX;
                 this.y = 400;
                 this.vx = 0;
@@ -339,6 +339,13 @@
                 this.punchCooldown = 0;
                 this.isPunching = false;
                 this.punchAnimTimer = 0;
+            }
+
+            respawn() {
+                this.x = this.startX;
+                this.y = 300;
+                this.vx = 0;
+                this.vy = 0;
             }
 
             update(keys) {
@@ -401,6 +408,13 @@
                 this.y += this.vy;
                 this.isGrounded = false;
                 this.checkPlatformCollisions(false);
+
+                // Spike Pit Hazard Collision Check
+                if (this.x < spikePit.x + spikePit.w &&
+                    this.x + this.w > spikePit.x &&
+                    this.y + this.h >= spikePit.y + 10) {
+                    this.respawn();
+                }
 
                 if (this.x < 0) this.x = 0;
                 if (this.x + this.w > canvas.width) this.x = canvas.width - this.w;
@@ -570,8 +584,7 @@
             keys[e.key] = false; 
         });
 
-        // --- BACKGROUND-FRIENDLY PHYSICS & SYNC TICK (60 FPS) ---
-        // Uses setInterval so physics and WebRTC packets update even when tab is hidden
+        // 60 FPS Physics & WebRTC Tick
         setInterval(() => {
             localPlayer.update(keys);
 
@@ -583,18 +596,38 @@
             }
         }, 1000 / 60);
 
-        // --- RENDER LOOP ---
-        // Handles visual rendering only when the tab is visible
+        // Visual Render Loop
         function renderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            // 1. Draw Platforms with Clear White Outlines
             ctx.fillStyle = '#22222d';
-            ctx.strokeStyle = '#444455';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
+
             platforms.forEach(p => {
                 ctx.fillRect(p.x, p.y, p.w, p.h);
                 ctx.strokeRect(p.x, p.y, p.w, p.h);
             });
 
+            // 2. Draw Center Red Spike Pit
+            const spikeWidth = spikePit.w / spikePit.count;
+            ctx.fillStyle = '#ff3333';
+            ctx.strokeStyle = '#ff9999';
+            ctx.lineWidth = 1;
+
+            for (let i = 0; i < spikePit.count; i++) {
+                const sx = spikePit.x + (i * spikeWidth);
+                ctx.beginPath();
+                ctx.moveTo(sx, spikePit.y + spikePit.h);
+                ctx.lineTo(sx + spikeWidth / 2, spikePit.y + 10);
+                ctx.lineTo(sx + spikeWidth, spikePit.y + spikePit.h);
+                ctx.closePath();
+                ctx.fill();
+                ctx.stroke();
+            }
+
+            // 3. Draw Players
             localPlayer.draw(ctx);
             peerPlayer.draw(ctx);
 
