@@ -19,7 +19,6 @@
         }
         h1 { margin-bottom: 10px; font-size: 22px; color: #7289da; }
         
-        /* Top Control Bar */
         #controls-bar {
             display: flex;
             flex-wrap: wrap;
@@ -55,7 +54,6 @@
         button:hover { background: #5b6eae; }
         button.active { background: #43b581; }
 
-        /* Main Game Layout */
         #game-container {
             display: flex;
             gap: 15px;
@@ -70,7 +68,6 @@
             border: 2px solid #333;
         }
         
-        /* Chat Container */
         #chat-container {
             width: 280px;
             height: 550px;
@@ -112,12 +109,12 @@
 
     <div id="controls-bar">
         <div class="control-group">
-            <label>ID:</label>
-            <strong id="my-id" style="color: #7289da;">Connecting...</strong>
+            <label>Room Code:</label>
+            <strong id="my-id" style="color: #43b581; font-size: 16px; letter-spacing: 1px;">----</strong>
         </div>
         <div class="control-group">
-            <input type="text" id="peer-id-input" placeholder="Host Peer ID">
-            <button id="connect-btn">Connect</button>
+            <input type="text" id="peer-id-input" placeholder="4-Digit Code" maxlength="4" style="width: 90px; text-align: center;">
+            <button id="connect-btn">Join</button>
         </div>
         <div class="control-group">
             <label>Name:</label>
@@ -154,7 +151,7 @@
     </div>
 
     <script>
-        // --- DESKTOP NOTIFICATIONS SETUP ---
+        // --- DESKTOP NOTIFICATIONS ---
         let notificationsEnabled = false;
         const notifyBtn = document.getElementById('notify-toggle-btn');
 
@@ -183,8 +180,12 @@
             }
         }
 
-        // --- WEBRTC SETUP (PeerJS) ---
-        const peer = new Peer();
+        // --- 4-DIGIT SHORT CODE WEBRTC SETUP ---
+        // Generate random 4-digit numeric string (1000 - 9999)
+        const my4DigitId = Math.floor(1000 + Math.random() * 9000).toString();
+        
+        // Pass custom 4-digit ID to PeerJS
+        const peer = new Peer(my4DigitId);
         let conn = null;
 
         const myIdEl = document.getElementById('my-id');
@@ -196,7 +197,17 @@
 
         peer.on('open', (id) => {
             myIdEl.textContent = id;
-            logSystemMsg("Ready! Share your ID or connect to another player.");
+            logSystemMsg("Your Room Code is: " + id);
+        });
+
+        // Retry with new ID if 4-digit code collides
+        peer.on('error', (err) => {
+            if (err.type === 'unavailable-id') {
+                const retryId = Math.floor(1000 + Math.random() * 9000).toString();
+                location.reload(); // Quick refresh if ID taken
+            } else {
+                console.error(err);
+            }
         });
 
         peer.on('connection', (c) => {
@@ -206,15 +217,17 @@
 
         connectBtn.addEventListener('click', () => {
             const peerId = peerIdInput.value.trim();
-            if (peerId) {
+            if (peerId && peerId.length === 4) {
                 conn = peer.connect(peerId);
                 setupDataConnection();
+            } else {
+                alert("Please enter a valid 4-digit room code.");
             }
         });
 
         function setupDataConnection() {
             conn.on('open', () => {
-                logSystemMsg("Connected to Peer!");
+                logSystemMsg("Connected to Room " + conn.peer + "!");
                 peerPlayer.active = true;
             });
 
@@ -226,7 +239,7 @@
                     appendMessage(data.sender, data.text, data.tagColor, 'peer');
                     sendDesktopNotification(`Message from ${data.sender}`, data.text);
                 } else if (data.type === 'punch_hit') {
-                    // Received knockback pulse from peer
+                    // Knockback processed instantly regardless of tab visibility
                     localPlayer.applyKnockback(data.direction);
                 }
             });
@@ -290,9 +303,8 @@
         const GRAVITY = 0.5;
         const FRICTION = 0.85;
 
-        // Expanded Map Layout
         const platforms = [
-            { x: 0, y: 510, w: 900, h: 40 }, // Ground
+            { x: 0, y: 510, w: 900, h: 40 },
             { x: 80, y: 400, w: 200, h: 15 },
             { x: 620, y: 400, w: 200, h: 15 },
             { x: 350, y: 320, w: 200, h: 15 },
@@ -313,7 +325,6 @@
                 this.w = this.normalWidth;
                 this.h = this.normalHeight;
                 
-                // Customization fields
                 this.username = 'Player';
                 this.tagColor = '#ffffff';
                 this.modelColor = '#7289da';
@@ -325,20 +336,17 @@
                 this.animFrame = 0;
                 this.active = true;
 
-                // Combat properties
-                this.punchCooldown = 0; // Frames remaining
+                this.punchCooldown = 0;
                 this.isPunching = false;
                 this.punchAnimTimer = 0;
             }
 
             update(keys) {
-                // Read local UI settings
                 this.username = document.getElementById('username-input').value.trim() || 'Player';
                 this.tagColor = document.getElementById('tag-color-input').value;
                 this.modelColor = document.getElementById('model-color-input').value;
                 this.bodyStyle = document.getElementById('body-style-input').value;
 
-                // Punch Cooldown Ticker
                 if (this.punchCooldown > 0) this.punchCooldown--;
                 if (this.punchAnimTimer > 0) {
                     this.punchAnimTimer--;
@@ -346,19 +354,16 @@
                     this.isPunching = false;
                 }
 
-                // Punching Trigger (SPACE)
                 if (keys[' '] && this.punchCooldown === 0) {
                     this.isPunching = true;
-                    this.punchAnimTimer = 12; // Anim duration (frames)
-                    this.punchCooldown = 180; // 3 second cooldown (60 fps * 3)
+                    this.punchAnimTimer = 12;
+                    this.punchCooldown = 180;
                     this.checkPunchHit();
                 }
 
-                // Movement Inputs
                 if (keys['a'] || keys['A']) this.facing = 'left';
                 if (keys['d'] || keys['D']) this.facing = 'right';
 
-                // Slide Mechanic
                 const isMoving = Math.abs(this.vx) > 1;
                 if ((keys['s'] || keys['S']) && this.isGrounded && isMoving) {
                     if (!this.isSliding) {
@@ -375,7 +380,6 @@
                     }
                 }
 
-                // Horizontal Movement
                 if (!this.isSliding) {
                     if (keys['a'] || keys['A']) this.vx -= 0.85;
                     if (keys['d'] || keys['D']) this.vx += 0.85;
@@ -384,16 +388,13 @@
                     this.vx *= 0.96;
                 }
 
-                // Jump Mechanic
                 if ((keys['w'] || keys['W']) && this.isGrounded && !this.isSliding) {
                     this.vy = -10.8;
                     this.isGrounded = false;
                 }
 
-                // Apply Gravity
                 this.vy += GRAVITY;
 
-                // Axis Collisions
                 this.x += this.vx;
                 this.checkPlatformCollisions(true);
 
@@ -401,7 +402,6 @@
                 this.isGrounded = false;
                 this.checkPlatformCollisions(false);
 
-                // Screen Boundary
                 if (this.x < 0) this.x = 0;
                 if (this.x + this.w > canvas.width) this.x = canvas.width - this.w;
 
@@ -411,18 +411,15 @@
             checkPunchHit() {
                 if (!peerPlayer.active) return;
 
-                // Punch Hitbox bounds calculation
                 const reach = 35;
                 const punchX = this.facing === 'right' ? this.x + this.w : this.x - reach;
                 const punchY = this.y;
 
-                // Intersection test with peer player
                 if (punchX < peerPlayer.x + peerPlayer.w &&
                     punchX + reach > peerPlayer.x &&
                     punchY < peerPlayer.y + peerPlayer.h &&
                     punchY + this.h > peerPlayer.y) {
                     
-                    // Direct peer knockback event transmission
                     if (conn && conn.open) {
                         conn.send({
                             type: 'punch_hit',
@@ -435,7 +432,7 @@
             applyKnockback(direction) {
                 const force = direction === 'right' ? 10 : -10;
                 this.vx = force;
-                this.vy = -5; // Vertical pop
+                this.vy = -5;
                 this.isGrounded = false;
             }
 
@@ -469,13 +466,11 @@
 
                 ctx.save();
                 
-                // --- 1. Draw Player Nametag & Cooldown Bar ---
                 ctx.font = '12px Segoe UI, sans-serif';
                 ctx.textAlign = 'center';
                 ctx.fillStyle = this.tagColor;
                 ctx.fillText(this.username, this.x + this.w / 2, this.y - 12);
 
-                // Draw Punch Cooldown Bar (For Local Player)
                 if (this === localPlayer && this.punchCooldown > 0) {
                     const barW = 30;
                     const barH = 4;
@@ -486,7 +481,6 @@
                     ctx.fillRect(this.x + this.w / 2 - barW / 2, this.y - 8, barW * progress, barH);
                 }
 
-                // --- 2. Render Player Model Body Types ---
                 ctx.translate(this.x + this.w / 2, this.y + this.h / 2);
 
                 let bobY = 0;
@@ -497,14 +491,12 @@
                 ctx.fillStyle = this.modelColor;
 
                 if (this.bodyStyle === 'knight') {
-                    // Knight Model
                     ctx.fillRect(-this.w / 2, -this.h / 2 + bobY, this.w, this.h);
                     ctx.fillStyle = '#FFFFFF';
                     const eyeOffset = this.facing === 'right' ? 3 : -7;
                     ctx.fillRect(-4 + eyeOffset, -this.h / 2 + 6 + bobY, 4, 6);
                     ctx.fillRect(3 + eyeOffset, -this.h / 2 + 6 + bobY, 4, 6);
                     
-                    // Horns
                     ctx.fillStyle = this.modelColor;
                     ctx.beginPath();
                     ctx.moveTo(-this.w / 2, -this.h / 2 + bobY);
@@ -519,29 +511,24 @@
                     ctx.fill();
 
                 } else if (this.bodyStyle === 'blob') {
-                    // Blob Model
                     ctx.beginPath();
                     ctx.ellipse(0, bobY, this.w / 2, this.h / 2, 0, 0, Math.PI * 2);
                     ctx.fill();
 
-                    // Eyes
                     ctx.fillStyle = '#FFF';
                     const eyeX = this.facing === 'right' ? 4 : -8;
                     ctx.fillRect(eyeX, -4 + bobY, 4, 4);
 
                 } else if (this.bodyStyle === 'robot') {
-                    // Robot Model
                     ctx.fillRect(-this.w / 2, -this.h / 2 + bobY, this.w, this.h);
                     ctx.fillStyle = '#333';
                     ctx.fillRect(-this.w / 2 + 3, -this.h / 2 + 6 + bobY, this.w - 6, 8);
                     
-                    // Glowing Visor
                     ctx.fillStyle = '#00ffcc';
                     const visorX = this.facing === 'right' ? 0 : -6;
                     ctx.fillRect(visorX, -this.h / 2 + 8 + bobY, 6, 4);
                 }
 
-                // --- 3. Draw Punch Animation Effect ---
                 if (this.isPunching) {
                     ctx.fillStyle = '#ffcc00';
                     const punchDir = this.facing === 'right' ? 1 : -1;
@@ -551,7 +538,6 @@
                 ctx.restore();
             }
 
-            // Sync Payload
             getState() {
                 return {
                     x: this.x,
@@ -574,7 +560,6 @@
         const peerPlayer = new Player(750);
         peerPlayer.active = false;
 
-        // Input Handling
         const keys = {};
         window.addEventListener('keydown', (e) => { 
             if (document.activeElement === chatInput || document.activeElement.tagName === 'INPUT') return;
@@ -585,22 +570,24 @@
             keys[e.key] = false; 
         });
 
-        // Game Loop
-        function gameLoop() {
+        // --- BACKGROUND-FRIENDLY PHYSICS & SYNC TICK (60 FPS) ---
+        // Uses setInterval so physics and WebRTC packets update even when tab is hidden
+        setInterval(() => {
             localPlayer.update(keys);
 
-            // Sync state across WebRTC
             if (conn && conn.open) {
                 conn.send({
                     type: 'state',
                     state: localPlayer.getState()
                 });
             }
+        }, 1000 / 60);
 
-            // Clear Screen
+        // --- RENDER LOOP ---
+        // Handles visual rendering only when the tab is visible
+        function renderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Draw Platforms
             ctx.fillStyle = '#22222d';
             ctx.strokeStyle = '#444455';
             platforms.forEach(p => {
@@ -608,14 +595,13 @@
                 ctx.strokeRect(p.x, p.y, p.w, p.h);
             });
 
-            // Draw Players
             localPlayer.draw(ctx);
             peerPlayer.draw(ctx);
 
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(renderLoop);
         }
 
-        requestAnimationFrame(gameLoop);
+        requestAnimationFrame(renderLoop);
     </script>
 </body>
 </html>
