@@ -180,9 +180,32 @@
             }
         }
 
-        // --- 4-DIGIT SHORT CODE WEBRTC SETUP ---
-        const my4DigitId = Math.floor(1000 + Math.random() * 9000).toString();
-        const peer = new Peer(my4DigitId);
+        // --- CROSS-DEVICE STUN/TURN & PREFIXED 4-DIGIT CODE WEBRTC SETUP ---
+        const APP_PREFIX = "hk-plat-game-";
+        const my4DigitCode = Math.floor(1000 + Math.random() * 9000).toString();
+        const fullPeerId = APP_PREFIX + my4DigitCode;
+
+        // PeerJS Configured with STUN & TURN servers for Firewall Traversal
+        const peer = new Peer(fullPeerId, {
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
+                    {
+                        urls: 'turn:openrelay.metered.ca:80',
+                        username: 'openrelay',
+                        credential: 'openrelay'
+                    },
+                    {
+                        urls: 'turn:openrelay.metered.ca:443',
+                        username: 'openrelay',
+                        credential: 'openrelay'
+                    }
+                ]
+            }
+        });
+
         let conn = null;
 
         const myIdEl = document.getElementById('my-id');
@@ -192,16 +215,16 @@
         const chatForm = document.getElementById('chat-form');
         const chatInput = document.getElementById('chat-input');
 
-        peer.on('open', (id) => {
-            myIdEl.textContent = id;
-            logSystemMsg("Your Room Code is: " + id);
+        peer.on('open', () => {
+            myIdEl.textContent = my4DigitCode;
+            logSystemMsg("Your Room Code is: " + my4DigitCode);
         });
 
         peer.on('error', (err) => {
             if (err.type === 'unavailable-id') {
                 location.reload();
             } else {
-                console.error(err);
+                console.error("PeerJS Error:", err);
             }
         });
 
@@ -211,9 +234,10 @@
         });
 
         connectBtn.addEventListener('click', () => {
-            const peerId = peerIdInput.value.trim();
-            if (peerId && peerId.length === 4) {
-                conn = peer.connect(peerId);
+            const enteredCode = peerIdInput.value.trim();
+            if (enteredCode && enteredCode.length === 4) {
+                const targetFullId = APP_PREFIX + enteredCode;
+                conn = peer.connect(targetFullId);
                 setupDataConnection();
             } else {
                 alert("Please enter a valid 4-digit room code.");
@@ -222,7 +246,7 @@
 
         function setupDataConnection() {
             conn.on('open', () => {
-                logSystemMsg("Connected to Room " + conn.peer + "!");
+                logSystemMsg("Connected to Room " + peerIdInput.value.trim() + "!");
                 peerPlayer.active = true;
             });
 
@@ -297,10 +321,9 @@
         const GRAVITY = 0.5;
         const FRICTION = 0.85;
 
-        // Ground split in two to leave room for the center spike pit
         const platforms = [
-            { x: 0, y: 510, w: 350, h: 40 },   // Left Ground
-            { x: 550, y: 510, w: 350, h: 40 }, // Right Ground
+            { x: 0, y: 510, w: 350, h: 40 },
+            { x: 550, y: 510, w: 350, h: 40 },
             { x: 80, y: 400, w: 200, h: 15 },
             { x: 620, y: 400, w: 200, h: 15 },
             { x: 350, y: 320, w: 200, h: 15 },
@@ -309,7 +332,6 @@
             { x: 380, y: 110, w: 140, h: 15 }
         ];
 
-        // Center Red Spike Pit Hazard Bounds
         const spikePit = { x: 350, y: 510, w: 200, h: 40, count: 10 };
 
         class Player {
@@ -409,7 +431,6 @@
                 this.isGrounded = false;
                 this.checkPlatformCollisions(false);
 
-                // Spike Pit Hazard Collision Check
                 if (this.x < spikePit.x + spikePit.w &&
                     this.x + this.w > spikePit.x &&
                     this.y + this.h >= spikePit.y + 10) {
@@ -584,7 +605,7 @@
             keys[e.key] = false; 
         });
 
-        // 60 FPS Physics & WebRTC Tick
+        // 60 FPS Physics & Network Sync Loop (Active even in background tabs)
         setInterval(() => {
             localPlayer.update(keys);
 
@@ -600,7 +621,7 @@
         function renderLoop() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. Draw Platforms with Clear White Outlines
+            // Platforms with White Outlines
             ctx.fillStyle = '#22222d';
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 2;
@@ -610,7 +631,7 @@
                 ctx.strokeRect(p.x, p.y, p.w, p.h);
             });
 
-            // 2. Draw Center Red Spike Pit
+            // Red Spike Pit
             const spikeWidth = spikePit.w / spikePit.count;
             ctx.fillStyle = '#ff3333';
             ctx.strokeStyle = '#ff9999';
@@ -627,7 +648,6 @@
                 ctx.stroke();
             }
 
-            // 3. Draw Players
             localPlayer.draw(ctx);
             peerPlayer.draw(ctx);
 
